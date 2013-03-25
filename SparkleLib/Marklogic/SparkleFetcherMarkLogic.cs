@@ -53,6 +53,7 @@ namespace SparkleLib.Marklogic {
             SparkleLogger.LogInfo ("Fetcher", "URI now: " + RemoteUrl.AbsoluteUri);
             
             Connection connection = new Connection ();
+            connection.setLogger (new SparkleMLLogger ());
             Options opts = new Options ();
             opts.setConnectionString (RemoteUrl.AbsoluteUri);
             connection.configure (opts);

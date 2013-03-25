@@ -70,6 +70,7 @@ namespace SparkleLib.Marklogic {
          */
         public override string CurrentRevision {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","CurrentRevision");
                 // TODO replace with remote function call
 
                 string file_path = new string [] { LocalPath, ".marklogic", "revision" }.Combine ();
@@ -86,18 +87,21 @@ namespace SparkleLib.Marklogic {
 
         public override double Size {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","Size");
                 return 1;
             }
         }
 
         public override double HistorySize {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","HistorySize");
                 return 1;
             }
         }
 
         public override bool HasRemoteChanges {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","HasRemoteChanges");
                 // Get locally saved remote last modified date property (CurrentRevision)
                 // Compare against remote version
                 // fetch all files under this URI added after this last modified date
@@ -109,13 +113,14 @@ namespace SparkleLib.Marklogic {
                 // return 1 result only to save bandwidth (1 or more means return true)
 
                 DocRefs refs = connection.listURIsModifiedSince(connection.options.baseuri,CurrentRevision);
-                return (0 != refs.docuris.Length);
+                return (0 != refs.Count());
 
             }
         }
 
         public static double GetCurrentMillis()
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","GetCurrentMillis");
             return toMillis (DateTime.UtcNow);
         }
 
@@ -127,6 +132,7 @@ namespace SparkleLib.Marklogic {
 
         // Holds the souble currenttimemillis() toString last synced timestamp according to the client machine
         private double GetLastSyncTimestamp() {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","GetLastSyncTimestampt");
             string file_path = new string [] { LocalPath, ".marklogic", "lastsynctimestamp" }.Combine ();
                 
             try {
@@ -137,6 +143,7 @@ namespace SparkleLib.Marklogic {
             }
         }
         private void SetLastSyncTimestamp(double newts) {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","SetLastSyncTimestamp");
             string file_path = new string [] { LocalPath, ".marklogic", "lastsynctimestamp" }.Combine ();
                 
             try {
@@ -151,6 +158,7 @@ namespace SparkleLib.Marklogic {
          */
         public override bool SyncUp ()
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","SyncUp");
             // rewrite for ML
             // get last synced timestamp
             // fetch all files saved locally (last modified) since this timestamp
@@ -223,6 +231,7 @@ namespace SparkleLib.Marklogic {
 
         public override bool SyncDown ()
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","SyncDown");
             bool result = doSyncDown (connection,CurrentRevision,LocalPath);
             if (result) {
                 
@@ -247,23 +256,24 @@ namespace SparkleLib.Marklogic {
             
             SparkleLogger.LogInfo ("MarklogicRepo", "fetching remote modifications");
             DocRefs remoteModifications = cn.listURIsModifiedSince (cn.options.baseuri, currentRevision);
-            ArrayList uriList = remoteModifications.toArrayList();
-            bool totalSuccess = true;
+            //ArrayList uriList = remoteModifications.toArrayList();
+                //IEnumerator uriList = remoteModifications.GetEnumerator();
+                bool totalSuccess = true;
             
-            long latestRevisionDateTime = 0;
-            long latestRevision = 0;
+                DateTime latestRevisionDateTime = DateTime.MinValue;
             
-            foreach (string uri in uriList) {
+            SparkleLogger.LogInfo("MarklogicRepo","Looping through URIs to download");
+            foreach (string uri in remoteModifications) {
                 SparkleLogger.LogInfo ("MarklogicRepo", "remote URI found: " + uri + ". Fetching file to " + local);
                 SyncFileResult result = doFetchFile(cn,uri,local);
                 totalSuccess = totalSuccess & result.success;
                 if (result.success) {
-                    if (0 == latestRevisionDateTime || Double.Parse(result.latestRevisionDateTime) > latestRevisionDateTime) {
-                        latestRevision = Int64.Parse(result.latestRevision);
-                        latestRevisionDateTime = Int64.Parse(result.latestRevisionDateTime);
+                    if (DateTime.MinValue == latestRevisionDateTime || result.lastModified > latestRevisionDateTime) {
+                        latestRevisionDateTime = result.lastModified;
                     }
                 }
             }
+            SparkleLogger.LogInfo("MarklogicRepo","Finished Looping through URIs to download");
             // TODO set Error = ErrorStatus.SOMETHING
             if (totalSuccess) {
                 // update last modified time
@@ -279,46 +289,51 @@ namespace SparkleLib.Marklogic {
         }
 
         public static SyncFileResult doFetchFile(Connection cn,string uri,string local) {
-            
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","doFetchFile");
+            // E.g. sending /myproject/info.xml to ~/Documents/SparkleShare/.tmp/myproject
+
             SyncFileResult result = new SyncFileResult ();
             result.success = true;
             
             
             
-            string relName = uri.Substring (cn.options.baseuri.Length);
-            string fullpath = (new string[] {local,relName}).Combine();
+            string relName = uri.Substring (cn.options.baseuri.Length + 1); // NB MUST ensure uri does not start with a / (absolute path)
+            SparkleLogger.LogInfo ("doFetchFile", "Relative file name: " + relName);
+            SparkleLogger.LogInfo ("doFetchFile", "local: " + local);
+            Directory.CreateDirectory (local); // ensure local exists first
+            string fullpath = Path.Combine(local,relName);
+            SparkleLogger.LogInfo ("doFetchFile", "fullpath: " + fullpath);
             // ensure folders exist
-            Directory.CreateDirectory (fullpath);
+            //Directory.CreateDirectory (fullpath);
             // fetch file to local file system
-            Response resp = cn.get (uri);
-            if (resp.inError) {
-                // TODO handle error
-                result.success = false;
-            } else {
+            Doc doc = cn.get (uri);
+            //if (resp.inError) {
+            //    // TODO handle error
+            //    result.success = false;
+            //} else {
                 // write out file to local
-                resp.doc.toFile (fullpath); // TODO code this method
+                doc.toFile (fullpath); // TODO code this method
                 
                 
-                resp = cn.metadata ();
-                if (resp.inError) {
-                    result.success = false;
-                } else {
-                    string myLastModified = resp.doc.getJsonContent ().Get ("last-modified");
-                    // get our date time
-                    // see if it's greater than currently saved one
-                    DateTime myDT = XmlConvert.ToDateTime (myLastModified);
-                    result.latestRevisionDateTime = toMillis(myDT).ToString();
-                    result.latestRevision = myLastModified;
-                }
-            }
+                Doc metadata = cn.metadata (uri);
+                //if (resp.inError) {
+                //    result.success = false;
+                //} else {
+            DateTime myDT = metadata.properties.LastModified;
+
+                    result.lastModified = myDT;
+                //}
+            //}
             return result;
         }
 
         public class SyncFileResult
         {
             public bool success {get;set;}
+            /*
             public string latestRevisionDateTime { get; set; }
-            public string latestRevision { get; set; }
+            public string latestRevision { get; set; }*/
+            public DateTime lastModified { get; set; }
         }
 
         private SyncFileResult fetchFile(string uri) {
@@ -328,6 +343,7 @@ namespace SparkleLib.Marklogic {
 
         public override bool HasLocalChanges {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","HasLocalChanges");
                 // go through file system and find files with last modified date greater than last sync time stamp
                 ICollection<string> changes = null;
                 if (0 != GetLastSyncTimestamp()) {
@@ -343,6 +359,7 @@ namespace SparkleLib.Marklogic {
 
         public override bool HasUnsyncedChanges {
             get {
+                SparkleLogger.LogInfo("SparkleRepoMarkLogic","HasUnsyncedChanges");
                 // TODO convert for ML
 
                 return HasLocalChanges;
@@ -358,6 +375,7 @@ namespace SparkleLib.Marklogic {
 
         public override void RestoreFile (string path, string revision, string target_file_path)
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","RestoreFile");
             
             if (path == null)
                 throw new ArgumentNullException ("path");
@@ -377,12 +395,14 @@ namespace SparkleLib.Marklogic {
 
         public override List<SparkleChangeSet> GetChangeSets (string path)
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","GetChangeSets(path)");
             return null;
         }   
 
 
         public override List<SparkleChangeSet> GetChangeSets ()
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","GetChangeSets");
             return null;
         }
 
@@ -392,6 +412,7 @@ namespace SparkleLib.Marklogic {
         
         private ICollection<String> listFiles (string path,double timestampMillis)
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","listFiles");
             ICollection<String> list = new List<string>();
 
             try {
@@ -431,6 +452,7 @@ namespace SparkleLib.Marklogic {
         
         private bool IsSymlink (string file)
         {
+            SparkleLogger.LogInfo("SparkleRepoMarkLogic","IsSymLink");
             FileAttributes attributes = File.GetAttributes (file);
             return ((attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint);
         }

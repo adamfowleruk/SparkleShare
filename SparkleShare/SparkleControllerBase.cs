@@ -552,7 +552,7 @@ namespace SparkleShare {
                     ShowSetupWindowEvent (PageType.CryptoPassword);
 
                 } else {
-                    FinishFetcher ();
+                    FinishFetcher (info);
                 }
             };
 
@@ -599,11 +599,11 @@ namespace SparkleShare {
         public void FinishFetcher (string password)
         {
             this.fetcher.EnableFetchedRepoCrypto (password);
-            FinishFetcher ();
+            FinishFetcher ((SparkleFetcherInfo)null);
         }
 
 
-        public void FinishFetcher ()
+        public void FinishFetcher (SparkleFetcherInfo info)
         {
             this.watcher.EnableRaisingEvents = false;
 
@@ -655,8 +655,13 @@ namespace SparkleShare {
                     return;
                 }
             }
-
-            string backend = SparkleFetcherBase.GetBackend (this.fetcher.RemoteUrl.ToString ());
+            string backend = null;
+            if (null != info) {
+                backend = info.Backend; // if this value exists we should use it
+            }
+            if (null == backend || "".Equals (backend)) {
+                backend = SparkleFetcherBase.GetBackend (this.fetcher.RemoteUrl.ToString ()); // FIXME should use value of backend used in fetcher, NOT try to guess it again here!
+            }
 
             this.config.AddFolder (target_folder_name, this.fetcher.Identifier,
                 this.fetcher.RemoteUrl.ToString (), backend);

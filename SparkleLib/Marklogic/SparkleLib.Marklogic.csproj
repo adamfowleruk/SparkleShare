@@ -93,10 +93,9 @@
   <ItemGroup>
     <Compile Include="SparkleRepoMarkLogic.cs" />
     <Compile Include="SparkleFetcherMarkLogic.cs" />
-    <Compile Include="SparkleShareLogger.cs">
-      <DependentUpon>Notes.txt</DependentUpon>
-    </Compile>
     <Compile Include="SparkleShareLogFactory.cs" />
+    <Compile Include="SparkleShareLogger.cs" />
+    <Compile Include="SparkleMLLogger.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SparkleLib.csproj">
